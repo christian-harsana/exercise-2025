@@ -13,15 +13,19 @@ interface PostsListProps {
 
 export function PostsList({ posts }: PostsListProps) {
   
-  // IMPROVEMENT NOTE:
   // Problems: 
   // - The inital amount of posts to display is very large
   // - Everytime user change the filter (i.e. typing into search box or change the sortBy dropdown), the app trigger an expensive filter process
-  // Improvement:
-  // - Implement Debounce for delaying the filter process
-  // - Implement simple pagination to manage the rendering of posts
-  // - Claude's Prompt use to get some ideas: Currently work in React. I have a component with has expensive filtering process and inside the component, there is a search bar. When user type inside the search bar, it will trigger a filtering process based on the value typed in. However, because the initial number of item is so many, typing the value inside the search bar become very unresponsive due to rendering the number of filtered items. What can we do in terms of the search bar? Is separate it to its own component help?
-  
+  // IMPROVEMENT NOTE:
+  // 1) Claude's Prompt used to get some ideas: Currently work in React. I have a component with has expensive filtering process and inside the component, there is a search bar. When user type inside the search bar, it will trigger a filtering process based on the value typed in. However, because the initial number of item is so many, typing the value inside the search bar become very unresponsive due to rendering the number of filtered items. What can we do in terms of the search bar? Is separate it to its own component help?
+  // 2) The first idea is to implement Debounce for triggering the state change when user has stopped typing for around 0.5 second
+  // This implementation help a little to make the typing a bit more responsive, but unfortunately not good enough.
+  // 3) Further prompting for: "Built-in React Alternatives" to get simple idea that can be implemented quickly 
+  // reveal simple pagination/limiting technique to limit the number of posts displayed, and ability to load more on button click.
+  // This seems work well with the number of posts limited, the issue for typing is significantly reduced.
+  // 4) Implement <Suspense> surround the post list area (excluding the filter) to show "LoadingIndicator" component
+  // 5) Looking at the other alternatives, for future to do: virtualisation may be the best approach for case like this
+
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<"date" | "likes">("date");
@@ -30,8 +34,6 @@ export function PostsList({ posts }: PostsListProps) {
   // Debounce
   useEffect(() => {
     const timer = setTimeout(() => {
-
-      console.log("set debounced search term");
 
       setDebouncedSearchTerm(searchTerm);
     }, 500);
@@ -42,8 +44,6 @@ export function PostsList({ posts }: PostsListProps) {
   const processedPosts = useMemo(() => {
 
     let filtered = posts;
-
-    if (!debouncedSearchTerm) return filtered;
 
     if (debouncedSearchTerm) {
 
@@ -103,7 +103,7 @@ export function PostsList({ posts }: PostsListProps) {
     setVisibleCount(50); // Reset to show first 50 of new results
   };
 
-  const hasMore = visiblePosts.length < processedPosts.length;
+  const hasMorePosts = visiblePosts.length < processedPosts.length;
 
   return (
     <div className="space-y-4">
@@ -154,7 +154,7 @@ export function PostsList({ posts }: PostsListProps) {
           ))}
         </div>
 
-        {hasMore && (
+        {hasMorePosts && (
           <button className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed" onClick={loadMorePosts}>
             Load More ({processedPosts.length - visiblePosts.length} remaining)
           </button>

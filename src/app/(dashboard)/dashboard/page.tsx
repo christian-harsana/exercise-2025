@@ -1,5 +1,6 @@
+import { Suspense } from "react";
 import { getSession } from "@/lib/auth/utils";
-import { getUserWithPosts } from "@/lib/data/users";
+import { getUserById } from "@/lib/data/users";
 import { getPostsWithAuthors, getAllPosts } from "@/lib/data/posts";
 import { UserProfile } from "@/components/user-profile";
 import { PostsList } from "@/components/posts-list";
@@ -8,6 +9,7 @@ import { PrefetchedPosts } from "@/components/prefetched-posts";
 import { CreatePostForm } from "@/components/create-post-form";
 import { logoutAction } from "@/lib/auth/actions";
 import { redirect } from "next/navigation";
+import { LoadingIndicator } from "@/components/loading-indicator";
 
 export default async function DashboardPage() {
   const session = await getSession();
@@ -16,7 +18,17 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const userData = await getUserWithPosts(session.userId);
+  // const userData = await getUserWithPosts(session.userId);
+  // IMPROVEMENT NOTE:
+  // Getting userData with getUserById is sufficient at this stage, as the user Posts data seems not being used inside UserProfile component 
+  const userData = await getUserById(session.userId);
+
+  // IMPROVEMENT NOTE:
+  // Issue: 
+  // - getPostsWithAuthors() and getAllPosts() results are pretty similar, so running 2 separate queries may not be efficient
+  // - postsPromise in the end only be used to display 5 latest posts, so getting 10000+ posts seems not efficient
+  // Todo:
+  // - Investigate further if it's possible to be optimised.
   const allPosts = await getPostsWithAuthors();
   const postsPromise = getAllPosts();
 
@@ -51,7 +63,7 @@ export default async function DashboardPage() {
               <UserProfile user={userData} />
 
               <div className="mt-6 bg-white shadow rounded-lg p-6">
-                <h3 className="text-lg font-semibold mb-4">Demo Pages</h3>
+                <h3 className="text-lg font-semibold mb-4 text-black">Demo Pages</h3>
                 <div className="space-y-2">
                   <a
                     href="/performance-demo"
@@ -63,7 +75,10 @@ export default async function DashboardPage() {
               </div>
 
               <div className="mt-6 bg-white shadow rounded-lg p-6">
-                <PrefetchedPosts postsPromise={postsPromise} />
+                {/* IMPROVEMENT NOTE: Implement SUSPENSE to display loading indicator when the postPromise still being loaded */}
+                <Suspense fallback={ <LoadingIndicator mode="light" />}>
+                  <PrefetchedPosts postsPromise={postsPromise} /> 
+                </Suspense>
               </div>
             </div>
 

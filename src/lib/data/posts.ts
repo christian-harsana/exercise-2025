@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
 import { posts, users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 
 export async function getAllPosts() {
   return await db.select().from(posts);
