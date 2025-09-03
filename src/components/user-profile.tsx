@@ -1,9 +1,18 @@
 "use client";
 
-import { User } from "@/lib/db/types";
+// IMPROVEMENT NOTE:
+// 1) Remove "User" type and replace with the new "PublicUser" which does not require "hashedPassword" inside its type definiton.
+// This will prevent the issue of sensitive data leak issue at the front-end.
+// 2) Update "UserProfileProps" interface to use "PublicUser" type instead of "User".
 
+// import { User } from "@/lib/db/types";
+// interface UserProfileProps {
+//   user: User;
+// }
+
+import { PublicUser } from "@/lib/db/types";
 interface UserProfileProps {
-  user: User;
+  user: PublicUser;
 }
 
 export function UserProfile({ user }: UserProfileProps) {

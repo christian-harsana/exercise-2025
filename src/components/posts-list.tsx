@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, Suspense, SetStateAction } from "react";
 import { LikeButton } from "./like-button";
+import { LoadingIndicator } from "./loading-indicator";
 import { Post, User } from "@/lib/db/types";
 
 interface PostsListProps {
@@ -11,27 +12,60 @@ interface PostsListProps {
 }
 
 export function PostsList({ posts }: PostsListProps) {
+  
+  // IMPROVEMENT NOTE:
+  // Problems: 
+  // - The inital amount of posts to display is very large
+  // - Everytime user change the filter (i.e. typing into search box or change the sortBy dropdown), the app trigger an expensive filter process
+  // Improvement:
+  // - Implement Debounce for delaying the filter process
+  // - Implement simple pagination to manage the rendering of posts
+  // - Claude's Prompt use to get some ideas: Currently work in React. I have a component with has expensive filtering process and inside the component, there is a search bar. When user type inside the search bar, it will trigger a filtering process based on the value typed in. However, because the initial number of item is so many, typing the value inside the search bar become very unresponsive due to rendering the number of filtered items. What can we do in terms of the search bar? Is separate it to its own component help?
+  
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<"date" | "likes">("date");
+  const [visibleCount, setVisibleCount] = useState(50);
 
+  // Debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+
+      console.log("set debounced search term");
+
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Filter Posts
   const processedPosts = useMemo(() => {
+
     let filtered = posts;
 
-    if (searchTerm) {
+    if (!debouncedSearchTerm) return filtered;
+
+    if (debouncedSearchTerm) {
+
       filtered = posts.filter((post) => {
+
         const titleMatch = post.title
           .toLowerCase()
-          .includes(searchTerm.toLowerCase());
+          .includes(debouncedSearchTerm.toLowerCase());
+        
         const contentMatch = post.content
           .toLowerCase()
-          .includes(searchTerm.toLowerCase());
+          .includes(debouncedSearchTerm.toLowerCase());
+
         const authorMatch = post.author?.username
           .toLowerCase()
-          .includes(searchTerm.toLowerCase());
+          .includes(debouncedSearchTerm.toLowerCase());
 
-        const complexCalculation = Array.from({ length: 1000 }, (_, i) => {
-          return Math.sqrt(i * Math.PI) + Math.sin(i) + Math.cos(i);
-        }).reduce((sum, val) => sum + val, 0);
+        // IMPROVEMENT NOTE:
+        // Remove redundant complexCalculation function.
+        // const complexCalculation = Array.from({ length: 1000 }, (_, i) => {
+        //   return Math.sqrt(i * Math.PI) + Math.sin(i) + Math.cos(i);
+        // }).reduce((sum, val) => sum + val, 0);
 
         return titleMatch || contentMatch || authorMatch;
       });
@@ -47,53 +81,85 @@ export function PostsList({ posts }: PostsListProps) {
     }
 
     return filtered;
-  }, [posts, searchTerm, sortBy]);
+  }, [posts, debouncedSearchTerm, sortBy]);
+
+
+  // Limit Visible Posts
+  const visiblePosts = useMemo(() => {
+    return processedPosts.slice(0, visibleCount);
+  }, [processedPosts, visibleCount]);
+
+  const loadMorePosts = () => {
+    setVisibleCount(prev => prev + 50);
+  };
+
+  // Reset visible count when search changes
+  const handleSearchChange = (e: { target: { value: SetStateAction<string>; }; }) => {
+    
+    const value = e.target.value;
+
+    setSearchTerm(value);
+    setDebouncedSearchTerm(value);
+    setVisibleCount(50); // Reset to show first 50 of new results
+  };
+
+  const hasMore = visiblePosts.length < processedPosts.length;
 
   return (
     <div className="space-y-4">
       <div className="flex gap-4 mb-6">
+        
         <input
           type="text"
           placeholder="Search posts..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          onChange={handleSearchChange}
+          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-black"
         />
+
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as "date" | "likes")}
-          className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-black"
         >
           <option value="date">Sort by Date</option>
           <option value="likes">Sort by Likes</option>
         </select>
       </div>
 
-      <div className="space-y-4">
-        {processedPosts.map((post) => (
-          <div key={post.id} className="bg-white shadow rounded-lg p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  {post.title}
-                </h3>
-                <p className="text-gray-600 mt-2">{post.content}</p>
-                <div className="mt-4 flex items-center text-sm text-gray-500">
-                  <span>By {post.author?.username || "Unknown"}</span>
-                  <span className="mx-2">•</span>
-                  <span>{new Date(post.createdAt).toLocaleDateString()}</span>
+      <Suspense fallback={<LoadingIndicator mode = {"light"} />}>
+        <div className="space-y-4">
+          {visiblePosts.map((post) => (
+            <div key={post.id} className="bg-white shadow rounded-lg p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {post.title}
+                  </h3>
+                  <p className="text-gray-600 mt-2">{post.content}</p>
+                  <div className="mt-4 flex items-center text-sm text-gray-500">
+                    <span>By {post.author?.username || "Unknown"}</span>
+                    <span className="mx-2">•</span>
+                    <span>{new Date(post.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+                <div className="flex items-center text-sm text-gray-500">
+                  <LikeButton
+                    postId={post.id}
+                    initialLikeCount={post.likeCount}
+                  />
                 </div>
               </div>
-              <div className="flex items-center text-sm text-gray-500">
-                <LikeButton
-                  postId={post.id}
-                  initialLikeCount={post.likeCount}
-                />
-              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+
+        {hasMore && (
+          <button className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed" onClick={loadMorePosts}>
+            Load More ({processedPosts.length - visiblePosts.length} remaining)
+          </button>
+        )}
+      </Suspense>
     </div>
   );
 }

@@ -30,5 +30,6 @@ export const updatePostSchema = createUpdateSchema(posts, {
 // Types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+export type PublicUser = Omit<User, 'hashedPassword'>; // IMPROVEMENT NOTE: Adding new type public user which does not include sensitive data: "hashedPassword"
 export type Post = typeof posts.$inferSelect;
 export type NewPost = typeof posts.$inferInsert;

@@ -1,17 +1,45 @@
 import { db } from '@/lib/db';
 import { users, posts } from '@/lib/db/schema';
-import { sum } from 'drizzle-orm';
+import { sum, sql } from 'drizzle-orm';
 
 async function getTotalUsers() {
   await new Promise(resolve => setTimeout(resolve, 800));
-  const userCount = await db.select().from(users);
-  return userCount.length;
+
+  // IMPROVEMENT NOTE:
+  // The following code is not efficient.
+  // it grabs the whole users data just to count the returned number of records.
+  // const userCount = await db.select().from(users);
+  // return userCount.length;
+  
+  // Using Claude, I want to know what frameworks does this syntax come from.
+  // Prompt: Can you tell what frameworks used for the following code: const userCount = await db.select().from(users);?
+  // It is Drizzle ORM
+  // Prompt: In drizzle, how to return number of record from a database query?
+  // Claude displayed couple of methods, but it specifically said that "await db.select({ count: sql<number>`count(*)`}).from(users);" is the most efficient.
+  // I want to know why it is considered the most efficient method.
+  // Prompt: Why does the sql count is the most efficient method?
+  // In summary: Only return a single number, Let the database do the counting (much faster), Minimize network transfer
+
+  const userResult = await db.select({ 
+    count: sql<number>`count(*)` 
+  }).from(users);
+
+  return userResult[0].count;
 }
 
 async function getTotalPosts() {
   await new Promise(resolve => setTimeout(resolve, 600));
-  const postCount = await db.select().from(posts);
-  return postCount.length;
+  
+  // IMPROVEMENT NOTE:
+  // Applying the same approach as in getTotalUsers() using sql<number>`count(*)` 
+  // const postCount = await db.select().from(posts);
+  // return postCount.length;
+
+  const postResult = await db.select({ 
+    count: sql<number>`count(*)` 
+  }).from(posts);
+
+  return postResult[0].count;
 }
 
 async function getTotalLikes() {

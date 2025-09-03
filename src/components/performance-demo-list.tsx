@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { PerformanceDemoItem } from "./performance-demo-item";
+import { LoadingIndicator } from "./loading-indicator";
 
 // Generate a large dataset
 const generateItems = (count: number) => {
@@ -19,41 +20,101 @@ const generateItems = (count: number) => {
 
 const ITEMS = generateItems(5000); // 5000 items to cause performance issues
 
+// IMPROVEMENT NOTE:
+// Reallocate the categories declaration outside the component to avoid redeclaration everytime the component re-render
+
+// Generate categories for filter
+const categories = ["all", ...Array.from(new Set(ITEMS.map(item => item.category)))];
+
+
 export function PerformanceDemoList() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [sortBy, setSortBy] = useState("name");
   const [showInStockOnly, setShowInStockOnly] = useState(false);
 
   // This filter runs on every render - performance issue #1
-  const filteredItems = ITEMS.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === "all" || item.category === selectedCategory;
-    const matchesStock = !showInStockOnly || item.inStock;
+  // const filteredItems = ITEMS.filter((item) => {
+  //   const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  //                        item.description.toLowerCase().includes(searchTerm.toLowerCase());
+  //   const matchesCategory = selectedCategory === "all" || item.category === selectedCategory;
+  //   const matchesStock = !showInStockOnly || item.inStock;
     
-    return matchesSearch && matchesCategory && matchesStock;
-  });
+  //   return matchesSearch && matchesCategory && matchesStock;
+  // });
 
+  // IMPROVEMENT NOTE: 
+  // 1) Implement debounce to only trigger searchTerm state change when user stop typing for 500ms
+  // This will cause the filter result dependent on the value of searchTerm, but provide better UX when the intial data is too large.
+  // Idea for implementation obtained when prompting the following on Claude:
+  // "In React, what are the best practices to prevent unecessary expensive computation on every render?"
+  // Future Improvement: Find a ways to improve the slowness when deleting searchTerm input with backspace 
+  // 2) Implement useMemo to cache filteredItems so the filtering won't run on every render.
+  // The cache will be updatead if only ITEMS, debouncedSearchTerm, showInStockOnly, selectedCategory changed.
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+  
+  const filteredItems = useMemo(() => {
+
+    if (!debouncedSearchTerm) return [];
+
+    return ITEMS.filter((item) => {
+
+      const matchesSearch = item.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) || item.description.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
+      const matchesCategory = selectedCategory === "all" || item.category === selectedCategory;
+      const matchesStock = !showInStockOnly || item.inStock;
+      
+      return matchesSearch && matchesCategory && matchesStock;
+    });
+  }, [ITEMS, debouncedSearchTerm, showInStockOnly, selectedCategory]);
+  
+  
   // This sort runs on every render - performance issue #2
-  const sortedItems = [...filteredItems].sort((a, b) => {
-    switch (sortBy) {
-      case "name":
-        return a.name.localeCompare(b.name);
-      case "price":
-        return a.price - b.price;
-      case "rating":
-        return b.rating - a.rating;
-      default:
-        return 0;
-    }
-  });
+  // const sortedItems = [...filteredItems].sort((a, b) => {
+  //     switch (sortBy) {
+  //       case "name":
+  //         return a.name.localeCompare(b.name);
+  //       case "price":
+  //         return a.price - b.price;
+  //       case "rating":
+  //         return b.rating - a.rating;
+  //       default:
+  //         return 0;
+  //     }
+  //   });
 
-  // Generate categories for filter
-  const categories = ["all", ...Array.from(new Set(ITEMS.map(item => item.category)))];
+  // IMPROVEMENT NOTE: 
+  // Implement useMemo to cache sortedItems so the filtering won't run on every render.
+  // The cache will be updatead if only filteredItems and sortBy changed.
+  // I was a bit unsure if it's best to have 2 useMemo for filteredItems and sortedItems so I consulted Claude.
+  // Prompt: Is it considered a best practice to have 2 separate useMemo for filter and sort, considering the sorting logic is complex to be chained inside the filter useMemo?
+  // It was considered as best practice for better performance, easier debugging and better testability
+  const sortedItems = useMemo(() => {
 
+    return [...filteredItems].sort((a, b) => {
+      switch (sortBy) {
+        case "name":
+          return a.name.localeCompare(b.name);
+        case "price":
+          return a.price - b.price;
+        case "rating":
+          return b.rating - a.rating;
+        default:
+          return 0;
+      }
+    });
+
+  }, [filteredItems, sortBy]);
+  
   return (
     <div className="space-y-6">
+
       {/* Controls that cause re-renders */}
       <div className="bg-white p-4 rounded-lg shadow space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -121,15 +182,17 @@ export function PerformanceDemoList() {
       </div>
 
       {/* The expensive list - renders all items without virtualization */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {sortedItems.map((item) => (
-          <PerformanceDemoItem
-            key={item.id}
-            item={item}
-            searchTerm={searchTerm} // Passing searchTerm causes unnecessary re-renders
-          />
-        ))}
-      </div>
+      <Suspense fallback={<LoadingIndicator mode={"dark"} />}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {sortedItems.map((item) => (
+            <PerformanceDemoItem
+              key={item.id}
+              item={item}
+              searchTerm={searchTerm} // Passing searchTerm causes unnecessary re-renders
+            />
+          ))}
+        </div>
+      </Suspense>
     </div>
   );
 }
